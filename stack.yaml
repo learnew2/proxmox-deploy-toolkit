@@ -1,0 +1,13 @@
+resolver:
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/21/15.yaml
+
+packages:
+- .
+
+extra-deps:
+- git: https://github.com/learnew2/proxmox-api
+  commit: 17d9d56aa5e14c88e7a29987dac3c1e20251f811
+- git: https://github.com/learnew2/proxmox-fs-agent
+  commit: 6f62d1b7f847c0d9d36516d3bb18dd4991693cd9
+  subdirs:
+  - proxmox-fs-agent-api
