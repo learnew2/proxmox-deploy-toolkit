@@ -310,6 +310,18 @@ executeTransactionAction (CloneVM params@(ProxmoxVMCloneParams { proxmoxVMCloneN
                     (Left e)      -> throwError (ClientError e)
                     (Right False) -> throwError (VMLocked proxmoxVMCloneNewID)
                     _             -> pure ()
+executeTransactionAction (ConfigureVM vmName payload) = do
+  (TransactionState { transactionDeployConfig = deployConfig@(DeployConfig { deployParameters = DeployParams { deployNodeName = nodeName }}),.. }) <- get
+  data' <- transactionDataGetF
+  case getVMID vmName data' deployConfig of
+    Nothing -> $(logWarn) $ T.pack $ "VM " <> vmName <> " has no allocated VMID"
+    (Just vmid) -> do
+      vmMap <- (defaultRetryClient' transactionProxmoxState) getActiveNodesVMMap >>= defaultClientErrorWrapper
+      case M.lookup vmid vmMap of
+        Nothing -> $(logWarn) $ T.pack $ "VM with VMID " <> show vmid <> " not found."
+        _ -> do
+          _ <- defaultRetryClient' transactionProxmoxState (putVMConfig nodeName vmid payload) >>= defaultClientErrorWrapper
+          pure ()
 executeTransactionAction (TransactionDelayAfter secondsPause action) = do
   () <- executeTransactionAction action
   (liftIO . threadDelay . (* 1_000_000)) secondsPause
@@ -465,7 +477,7 @@ planTransactionActions stages bridges sdnZones sdnNetworks storages vmMap state'
           (Just _) -> helper ts acc -- TODO: reconfig VM (and unify vm check, wtf)
           Nothing -> do
             helper ts (CreateVM vm:acc)
-  helper ((VMExists (TemplatedConfigVM { configVMParentTemplate = parentTemplateName, configVMName = vmName, configVMID = vmID, configVMStorage = vmStorage, configVMDisplay = vmDisplay })):ts) acc = do
+  helper ((VMExists vm@(TemplatedConfigVM { configVMParentTemplate = parentTemplateName, configVMName = vmName, configVMID = vmID, configVMStorage = vmStorage, configVMDisplay = vmDisplay })):ts) acc = do
     (TransactionState { transactionDeployConfig = deployConfig@(DeployConfig { deployTemplates = vmTemplates, deployParameters = DeployParams { deployNodeName = deployNodeName }, deployAgent = deployAgent }), .. }) <- get
     data' <- transactionDataGetF
     case filter ((==) parentTemplateName . configTemplateName) vmTemplates of
@@ -476,7 +488,9 @@ planTransactionActions stages bridges sdnZones sdnNetworks storages vmMap state'
             Nothing -> pure ()
             (Just storage) -> unless (any ((==storage) . proxmoxStorage) storages) $ throwError (StorageNotFound storage)
         -- if isJust deployAgent && isJust vmDisplay then [SetVMDisplay vmName (fromJust vmDisplay)] else []
-        let cloneStage = (if isJust deployAgent && isJust vmDisplay then [SetVMDisplay vmName (fromJust vmDisplay)] else []) ++ [CloneVM (ProxmoxVMCloneParams {proxmoxVMCloneVMID = templateID, proxmoxVMCloneStorage = fmap T.pack vmStorage, proxmoxVMCloneSnapname = Nothing, proxmoxVMCloneTarget = Just deployNodeName, proxmoxVMCloneNewID = fromMaybe (-1) vmID, proxmoxVMCloneName = (Just . T.pack) vmName, proxmoxVMCloneDescription=Nothing})]
+        let agentStage = (if isJust deployAgent && isJust vmDisplay then [SetVMDisplay vmName (fromJust vmDisplay)] else [])
+        let patchParams = formatConfigVMPatch vm
+        let cloneStage = agentStage ++ if isNothing patchParams then [] else [ConfigureVM vmName (fromJust patchParams)] ++ [CloneVM (ProxmoxVMCloneParams {proxmoxVMCloneVMID = templateID, proxmoxVMCloneStorage = fmap T.pack vmStorage, proxmoxVMCloneSnapname = Nothing, proxmoxVMCloneTarget = Just deployNodeName, proxmoxVMCloneNewID = fromMaybe (-1) vmID, proxmoxVMCloneName = (Just . T.pack) vmName, proxmoxVMCloneDescription=Nothing})]
         case getVMID vmName data' deployConfig of
           Nothing -> helper ts (cloneStage ++ (AssignVMID vmName:acc))
           (Just vmID') -> do

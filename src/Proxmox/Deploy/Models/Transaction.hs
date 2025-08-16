@@ -35,6 +35,8 @@ import           Control.Monad.Reader
 import           Control.Monad.State                   (MonadState, get, gets)
 import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.State             (StateT)
+import           Data.Aeson
+import qualified Data.Map                              as M
 import           Proxmox.Deploy.Models.Config
 import           Proxmox.Deploy.Models.Config.Network
 import           Proxmox.Deploy.Models.Config.Template
@@ -63,6 +65,7 @@ data TransactionAction
   | UnassignVMID String
   | AssignVMID String
   | CloneVM ProxmoxVMCloneParams
+  | ConfigureVM String (M.Map String Value)
   | SetVMDisplay String Int
   | CreateVM ConfigVM -- replace
   | DestroyVM String

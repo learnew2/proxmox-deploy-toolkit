@@ -19,11 +19,13 @@ module Proxmox.Deploy.Models.Config.VM
   , ConfigVMNetwork(..)
   , isTemplateVM
   , formatConfigVMNetwork
+  , formatConfigVMPatch
   ) where
 
 import           Data.Aeson
 import qualified Data.Aeson.KeyMap               as KM
 import           Data.List                       (intercalate)
+import qualified Data.Map                        as M
 import           Data.Maybe
 import qualified Data.Text                       as T
 import           Parsers
@@ -67,12 +69,29 @@ data ConfigVM = TemplatedConfigVM
   , configVMRunning        :: !Bool
   , configVMStorage        :: !(Maybe String)
   , configVMDisplay        :: !(Maybe Int)
+  , configVMCores          :: !(Maybe Int)
+  , configVMCPULimit       :: !(Maybe Int)
+  , configVMMemory         :: !(Maybe Int)
   } | RawVM
   { configVMName    :: !String
   , configVMID      :: !(Maybe Int)
   , configVMDelay   :: !Int
   , configVMRunning :: !Bool
   } deriving (Show, Eq)
+
+formatConfigVMPatch :: ConfigVM -> Maybe (M.Map String Value)
+formatConfigVMPatch RawVM {} = Nothing
+formatConfigVMPatch TemplatedConfigVM { configVMCores = Nothing, configVMCPULimit = Nothing, configVMMemory = Nothing } = Nothing
+formatConfigVMPatch TemplatedConfigVM { .. } = (Just . M.fromList) $ cores ++ limit ++ memory where
+  cores = case configVMCores of
+    Nothing  -> []
+    (Just v) -> [("cores", (Number . fromIntegral) v)]
+  limit = case configVMCPULimit of
+    Nothing  -> []
+    (Just v) -> [("cpulimit", (Number . fromIntegral) v)]
+  memory = case configVMMemory of
+    Nothing  -> []
+    (Just v) -> [("memory", (Number . fromIntegral) v)]
 
 instance FromJSON ConfigVM where
   parseJSON = withObject "ConfigVM" $ \v -> case KM.lookup "clone_from" v of
@@ -91,6 +110,9 @@ instance FromJSON ConfigVM where
       <*> nullDefaultWrapper (KM.lookup "running" v) True variableBooleanParser
       <*> v .:? "storage"
       <*> v .:? "display"
+      <*> v .:? "cores"
+      <*> nullMaybeWrapper (KM.lookup "cpu_limit" v) (limitedNumberParser (`elem` [0..128]) "CPU limit must be in range of 0..128")
+      <*> v .:? "memory"
     _anyOtherType -> fail "clone_from field has incorrect value type!"
 
 isTemplateVM :: ConfigVM -> Bool
