@@ -49,6 +49,15 @@ formatConfigVMNetwork ConfigVMNetwork { .. } = case configVMNetworkNumber of
     ]
     ++ ["tag=" <> (show . fromJust) configVMNetworkTag | isJust configVMNetworkTag])
 
+instance ToJSON ConfigVMNetwork where
+  toJSON (ConfigVMNetwork { .. }) = object
+    [ "name" .= configVMNetworkName
+    , "firewall" .= configVMNetworkFirewall
+    , "type" .= configVMDeviceType
+    , "tag" .= configVMNetworkTag
+    , "number" .= configVMNetworkNumber
+    ]
+
 instance FromJSON ConfigVMNetwork where
   parseJSON (String networkName) = pure $ ConfigVMNetwork (T.unpack networkName) True VIRTIO Nothing Nothing
   parseJSON (Object v) = ConfigVMNetwork
@@ -92,6 +101,28 @@ formatConfigVMPatch TemplatedConfigVM { .. } = (Just . M.fromList) $ cores ++ li
   memory = case configVMMemory of
     Nothing  -> []
     (Just v) -> [("memory", (Number . fromIntegral) v)]
+
+instance ToJSON ConfigVM where
+  toJSON (RawVM { .. }) = object
+    [ "name" .= configVMName
+    , "vmid" .= configVMID
+    , "delay" .= configVMDelay
+    , "running" .= configVMRunning
+    ]
+  toJSON (TemplatedConfigVM { .. }) = object
+    [ "clone_from" .= configVMParentTemplate
+    , "name" .= configVMName
+    , "vmid" .= configVMID
+    , "delay" .= configVMDelay
+    , "networks" .= configVMNetworks
+    , "clean_networks" .= configVMCleanNetworks
+    , "running" .= configVMRunning
+    , "storage" .= configVMStorage
+    , "display" .= configVMDisplay
+    , "cores" .= configVMCores
+    , "cpu_limit" .= configVMCPULimit
+    , "memory" .= configVMMemory
+    ]
 
 instance FromJSON ConfigVM where
   parseJSON = withObject "ConfigVM" $ \v -> case KM.lookup "clone_from" v of

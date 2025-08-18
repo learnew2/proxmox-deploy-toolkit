@@ -13,6 +13,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, see <http://www.gnu.org/licenses>. -}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Proxmox.Deploy.Models.Config.Template (ConfigTemplate(..)) where
 
 import           Data.Aeson
@@ -26,3 +27,9 @@ instance FromJSON ConfigTemplate where
   parseJSON = withObject "ConfigTemplate" $ \v -> ConfigTemplate
     <$> v .: "name"
     <*> v .: "id"
+
+instance ToJSON ConfigTemplate where
+  toJSON (ConfigTemplate { .. }) = object
+    [ "name" .= configTemplateName
+    , "id" .= configTemplateID
+    ]

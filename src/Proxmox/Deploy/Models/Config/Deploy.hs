@@ -13,6 +13,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, see <http://www.gnu.org/licenses>. -}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Proxmox.Deploy.Models.Config.Deploy
   ( DeployParams(..)
   ) where
@@ -35,3 +36,12 @@ instance FromJSON DeployParams where
     <*> v .: "url"
     <*> v .:? "ignore_ssl" .!= False
     <*> v .:? "start_vmid" .!= 100
+
+instance ToJSON DeployParams where
+  toJSON (DeployParams { .. }) = object
+    [ "node" .= deployNodeName
+    , "token" .= deployToken
+    , "url" .= deployUrl
+    , "ignore_ssl" .= deployIgnoreSSL
+    , "start_vmid" .= deployStartVMID
+    ]

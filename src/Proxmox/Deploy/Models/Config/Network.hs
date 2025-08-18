@@ -13,6 +13,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, see <http://www.gnu.org/licenses>. -}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Proxmox.Deploy.Models.Config.Network
   ( ConfigNetwork(..)
   ) where
@@ -31,6 +32,12 @@ instance FromJSON ConfigSubnetRange where
     <$> (v .: "start" <|> v .: "begin")
     <*> v .: "end"
 
+instance ToJSON ConfigSubnetRange where
+  toJSON (ConfigSubnetRange { .. }) = object
+    [ "start" .= configSubnetRangeStart
+    , "end" .= configSubnetRangeEnd
+    ]
+
 data ConfigSubnet = ConfigSubnet
   { configSubnetCIDR      :: !String
   , configSubnetDNS       :: !(Maybe String)
@@ -39,6 +46,16 @@ data ConfigSubnet = ConfigSubnet
   , configSubnetSNAT      :: !Bool
   , configSubnetRanges    :: ![ConfigSubnetRange]
   } deriving (Show, Eq)
+
+instance ToJSON ConfigSubnet where
+  toJSON (ConfigSubnet { .. }) = object
+    [ "cidr" .= configSubnetCIDR
+    , "dns" .= configSubnetDNS
+    , "dns_prefix" .= configSubnetDNSPrefix
+    , "gateway" .= configSubnetGateway
+    , "snat" .= configSubnetSNAT
+    , "dhcp_ranges" .= configSubnetRanges
+    ]
 
 instance FromJSON ConfigSubnet where
   parseJSON = withObject "ConfigSubnet" $ \v -> ConfigSubnet
@@ -58,6 +75,16 @@ data ConfigNetwork = ExistingNetwork
   , configNetworkName      :: !String
   , configNetworkVLANAware :: !(Maybe Bool)
   } deriving (Show, Eq)
+
+instance ToJSON ConfigNetwork where
+  toJSON (ExistingNetwork { .. }) = object [ "type" .= String "existing", "name" .= configNetworkName ]
+  toJSON (SDNNetwork { .. }) = object
+    [ "type" .= String "sdn"
+    , "name" .= configNetworkName
+    , "subnets" .= configNetworkSubnets
+    , "zone" .= configNetworkZone
+    , "vlanaware" .= configNetworkVLANAware
+    ]
 
 instance FromJSON ConfigNetwork where
   parseJSON = let

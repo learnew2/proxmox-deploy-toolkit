@@ -13,6 +13,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, see <http://www.gnu.org/licenses>. -}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Proxmox.Deploy.Models.Config
   ( DeployConfig(..)
   , decodeDeployConfig
@@ -36,6 +37,15 @@ data DeployConfig = DeployConfig
   , deployNetworks   :: ![ConfigNetwork]
   , deployAgent      :: !(Maybe DeployAgentConfig)
   } deriving Show
+
+instance ToJSON DeployConfig where
+  toJSON (DeployConfig { .. }) = object
+    [ "templates" .= deployTemplates
+    , "deploy" .= deployParameters
+    , "vms" .= deployVMs
+    , "networks" .= deployNetworks
+    , "agent" .= deployAgent
+    ]
 
 instance FromJSON DeployConfig where
   parseJSON = withObject "DeployConfig" $ \v -> DeployConfig

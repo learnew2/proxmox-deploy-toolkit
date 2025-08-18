@@ -13,6 +13,7 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program; if not, see <http://www.gnu.org/licenses>. -}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Proxmox.Deploy.Models.Config.DeployAgent
   ( DeployAgentConfig(..)
   ) where
@@ -31,3 +32,10 @@ instance FromJSON DeployAgentConfig where
     <$> v .: "url"
     <*> v .: "token"
     <*> v .:? "display_network" .!= "0.0.0.0"
+
+instance ToJSON DeployAgentConfig where
+  toJSON (DeployAgentConfig { .. }) = object
+    [ "url" .= configAgentURL
+    , "token" .= configAgentToken
+    , "display_network" .= configAgentDisplayNetwork
+    ]
