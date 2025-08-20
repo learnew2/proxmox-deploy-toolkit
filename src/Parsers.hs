@@ -43,17 +43,21 @@ variableBooleanParser _ = error "Invalid boolean value!"
 
 nullMaybeWrapper :: MonadFail f => Maybe Value -> (Value -> f a) -> f (Maybe a)
 nullMaybeWrapper Nothing _       = pure Nothing
+nullMaybeWrapper (Just Null) _   = pure Nothing
 nullMaybeWrapper (Just v) parser = parser v <&> Just
 
 nullDefaultWrapper :: MonadFail f => Maybe Value -> a -> (Value -> f a) -> f a
 nullDefaultWrapper Nothing def _     = pure def
+nullDefaultWrapper (Just Null) def _ = pure def
 nullDefaultWrapper (Just v) _ parser = parser v
 
 notNullWrapper :: MonadFail f => Maybe Value -> (Value -> f a) -> f a
 notNullWrapper Nothing _       = fail "Value must be not null"
+notNullWrapper (Just Null) _   = fail "Value must be not null"
 notNullWrapper (Just v) parser = parser v
 
 nonEmptyStringParser Nothing            = pure Nothing
+nonEmptyStringParser (Just Null)        = pure Nothing
 nonEmptyStringParser (Just (String "")) = pure Nothing
 nonEmptyStringParser (Just (String v))  = (pure . Just . T.unpack) v
 nonEmptyStringParser _                  = fail "Invalid value type"
