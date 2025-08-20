@@ -5,15 +5,15 @@
 
 packages:
 - completed:
-    commit: 17d9d56aa5e14c88e7a29987dac3c1e20251f811
+    commit: 1790cd081d15cd7171e476be67d1f564061c4e1f
     git: https://github.com/learnew2/proxmox-api
     name: proxmox-api
     pantry-tree:
-      sha256: 98187f2c3eae416c2260971df879637dbe7de4e2688ffed41dd22d32e43c9ec1
+      sha256: 4d418f1ffb57addd243d9026fb59c9a438531ca2d20d58b534a31ad0e2afd2e2
       size: 1528
-    version: 0.1.0.1
+    version: 0.1.0.2
   original:
-    commit: 17d9d56aa5e14c88e7a29987dac3c1e20251f811
+    commit: 1790cd081d15cd7171e476be67d1f564061c4e1f
     git: https://github.com/learnew2/proxmox-api
 - completed:
     commit: 6f62d1b7f847c0d9d36516d3bb18dd4991693cd9

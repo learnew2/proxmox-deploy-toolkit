@@ -6,7 +6,7 @@ packages:
 
 extra-deps:
 - git: https://github.com/learnew2/proxmox-api
-  commit: 17d9d56aa5e14c88e7a29987dac3c1e20251f811
+  commit: 1790cd081d15cd7171e476be67d1f564061c4e1f
 - git: https://github.com/learnew2/proxmox-fs-agent
   commit: 6f62d1b7f847c0d9d36516d3bb18dd4991693cd9
   subdirs:

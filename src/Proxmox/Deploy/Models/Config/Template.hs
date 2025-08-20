@@ -21,7 +21,7 @@ import           Data.Aeson
 data ConfigTemplate = ConfigTemplate
   { configTemplateName :: !String
   , configTemplateID   :: !Int
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 instance FromJSON ConfigTemplate where
   parseJSON = withObject "ConfigTemplate" $ \v -> ConfigTemplate

@@ -37,7 +37,7 @@ data ConfigVMNetwork = ConfigVMNetwork
   , configVMDeviceType      :: !NetworkInterfaceType
   , configVMNetworkTag      :: !(Maybe Int)
   , configVMNetworkNumber   :: !(Maybe Int)
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 formatConfigVMNetwork :: ConfigVMNetwork -> Maybe (String, String)
 formatConfigVMNetwork ConfigVMNetwork { .. } = case configVMNetworkNumber of
@@ -86,7 +86,7 @@ data ConfigVM = TemplatedConfigVM
   , configVMID      :: !(Maybe Int)
   , configVMDelay   :: !Int
   , configVMRunning :: !Bool
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 formatConfigVMPatch :: ConfigVM -> Maybe (M.Map String Value)
 formatConfigVMPatch RawVM {} = Nothing

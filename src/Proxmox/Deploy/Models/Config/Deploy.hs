@@ -27,7 +27,7 @@ data DeployParams = DeployParams
   , deployUrl       :: !Text
   , deployIgnoreSSL :: !Bool
   , deployStartVMID :: !Int
-  } deriving Show
+  } deriving (Show, Eq, Ord)
 
 instance FromJSON DeployParams where
   parseJSON = withObject "DeployParams" $ \v -> DeployParams

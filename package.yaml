@@ -1,5 +1,5 @@
 name:                proxmox-deploy-toolkit
-version:             0.1.1.1
+version:             0.1.1.2
 github:              "learnew2/proxmox-deploy-toolkit"
 license:             GPL-3.0-or-later
 author:              "Ilya Zamaratskikh"

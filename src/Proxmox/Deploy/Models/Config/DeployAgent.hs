@@ -25,7 +25,7 @@ data DeployAgentConfig = DeployAgentConfig
   { configAgentURL            :: !Text
   , configAgentToken          :: !Text
   , configAgentDisplayNetwork :: !Text
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 instance FromJSON DeployAgentConfig where
   parseJSON = withObject "DeployAgentConfig" $ \v -> DeployAgentConfig

@@ -36,7 +36,7 @@ data DeployConfig = DeployConfig
   , deployVMs        :: ![ConfigVM]
   , deployNetworks   :: ![ConfigNetwork]
   , deployAgent      :: !(Maybe DeployAgentConfig)
-  } deriving Show
+  } deriving (Show, Eq, Ord)
 
 instance ToJSON DeployConfig where
   toJSON (DeployConfig { .. }) = object

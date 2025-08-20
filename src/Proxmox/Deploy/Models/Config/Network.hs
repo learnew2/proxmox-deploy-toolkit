@@ -25,7 +25,7 @@ import qualified Data.Aeson.KeyMap   as KV
 data ConfigSubnetRange = ConfigSubnetRange
   { configSubnetRangeStart :: !String
   , configSubnetRangeEnd   :: !String
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 instance FromJSON ConfigSubnetRange where
   parseJSON = withObject "ConfigSubnetRange" $ \v -> ConfigSubnetRange
@@ -45,7 +45,7 @@ data ConfigSubnet = ConfigSubnet
   , configSubnetGateway   :: !(Maybe String)
   , configSubnetSNAT      :: !Bool
   , configSubnetRanges    :: ![ConfigSubnetRange]
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 instance ToJSON ConfigSubnet where
   toJSON (ConfigSubnet { .. }) = object
@@ -74,7 +74,7 @@ data ConfigNetwork = ExistingNetwork
   , configNetworkZone      :: !String
   , configNetworkName      :: !String
   , configNetworkVLANAware :: !(Maybe Bool)
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 instance ToJSON ConfigNetwork where
   toJSON (ExistingNetwork { .. }) = object [ "type" .= String "existing", "name" .= configNetworkName ]
