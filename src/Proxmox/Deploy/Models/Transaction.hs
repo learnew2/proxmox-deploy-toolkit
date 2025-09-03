@@ -37,12 +37,14 @@ import           Control.Monad.Trans.Except
 import           Control.Monad.Trans.State             (StateT)
 import           Data.Aeson
 import qualified Data.Map                              as M
+import           Data.Text                             (Text)
 import           Proxmox.Deploy.Models.Config
 import           Proxmox.Deploy.Models.Config.Network
 import           Proxmox.Deploy.Models.Config.Template
 import           Proxmox.Deploy.Models.Config.VM
 import           Proxmox.Deploy.Types
 import           Proxmox.Models.SDNNetwork
+import           Proxmox.Models.Snapshot
 import           Proxmox.Models.VMClone
 import           Proxmox.Schema
 import           Servant.Client
@@ -57,6 +59,9 @@ data TransactionStage
   | NetworksRemoved String
   | VMStopped ConfigVM
   | VMRunning ConfigVM
+  | SnapshotExists ConfigVM ProxmoxSnapshotCreate
+  | SnapshotNotExists ConfigVM ProxmoxSnapshotCreate
+  | VMRollbacked ConfigVM String
   deriving (Show, Eq)
 
 data TransactionAction
@@ -75,6 +80,9 @@ data TransactionAction
   | AttachNetwork String ConfigVMNetwork
   | TransactionDelayAfter Int TransactionAction
   | DetachNetwork String Int
+  | MakeSnapshot String ProxmoxSnapshotCreate
+  | DeleteSnapshot String ProxmoxSnapshotCreate
+  | RollbackVM String String
   deriving (Show, Eq)
 
 data DeployTarget = Deploy | Destroy deriving (Show, Eq)

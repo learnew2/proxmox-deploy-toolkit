@@ -39,6 +39,7 @@ import           Data.List                                (nub, sortOn)
 import           Data.Map                                 (Map)
 import qualified Data.Map                                 as M
 import           Data.Maybe
+import           Data.Text                                (Text)
 import qualified Data.Text                                as T
 import           Proxmox.Agent.Client
 import           Proxmox.Client
@@ -56,6 +57,7 @@ import           Proxmox.Models
 import           Proxmox.Models.Network
 import           Proxmox.Models.SDNNetwork
 import           Proxmox.Models.SDNZone
+import           Proxmox.Models.Snapshot
 import           Proxmox.Models.Storage
 import           Proxmox.Models.VM
 import qualified Proxmox.Models.VM                        as VM
@@ -64,6 +66,12 @@ import           Proxmox.Models.VMConfig
 import           Proxmox.Retry
 import           Proxmox.Schema                           (ProxmoxState (ProxmoxState))
 import           Servant.Client                           (parseBaseUrl)
+
+snapshotPresent :: Text -> ProxmoxResponse [ProxmoxSnapshot] -> Bool
+snapshotPresent snapName (ProxmoxResponse { proxmoxData = snaps }) = any ((==) snapName . snapshotName) snaps
+
+snapshotNotPresent :: Text -> ProxmoxResponse [ProxmoxSnapshot] -> Bool
+snapshotNotPresent snapName resp = not $ snapshotPresent snapName resp
 
 vmDeviceNotPresent :: String -> ProxmoxResponse (Maybe ProxmoxVMConfig) -> Bool
 vmDeviceNotPresent deviceName resp = not $ vmDevicePresent deviceName resp
@@ -252,6 +260,63 @@ executeTransactionAction (SetVMDisplay vmName vmDisplay) = do
                 (Right _) -> do
                   $(logInfo) $ T.pack $ "Display of VM " <> vmName <> " changed"
                   pure ()
+executeTransactionAction (MakeSnapshot vmName snapParams) = do
+  (TransactionState { transactionDeployConfig = deployConfig@(DeployConfig {deployParameters = (DeployParams { deployNodeName = nodeName }) }),.. }) <- get
+  data' <- transactionDataGetF
+  case getVMID vmName data' deployConfig of
+    Nothing -> $(logWarn) $ T.pack $ "VM " <> vmName <> " has no allocated VMID"
+    (Just vmid) -> do
+      vmMap <- (defaultRetryClient' transactionProxmoxState) (getNodeVMsMap nodeName) >>= defaultClientErrorWrapper
+      case M.lookup vmid vmMap of
+        Nothing -> $(logWarn) $ T.pack $ "VM with VMID " <> show vmid <> " not found."
+        _ -> do
+          _ <- (defaultRetryClientC' transactionProxmoxState) (createSnapshot nodeName vmid snapParams) >>= defaultClientErrorWrapper
+          _ <- waitForClient
+            300_000_000
+            (T.pack $ "Waiting for snapshotting of VM " <> vmName)
+            60
+            1_000_000
+            (defaultRetryClient' transactionProxmoxState $ getVMSnapshots nodeName vmid)
+            (snapshotPresent (snapshotCreateName snapParams))
+          pure ()
+executeTransactionAction (DeleteSnapshot vmName (ProxmoxSnapshotCreate { snapshotCreateName = snapName })) = do
+  (TransactionState { transactionDeployConfig = deployConfig@(DeployConfig {deployParameters = (DeployParams { deployNodeName = nodeName }) }),.. }) <- get
+  data' <- transactionDataGetF
+  case getVMID vmName data' deployConfig of
+    Nothing -> $(logWarn) $ T.pack $ "VM " <> vmName <> " has no allocated VMID"
+    (Just vmid) -> do
+      vmMap <- (defaultRetryClient' transactionProxmoxState) (getNodeVMsMap nodeName) >>= defaultClientErrorWrapper
+      case M.lookup vmid vmMap of
+        Nothing -> $(logWarn) $ T.pack $ "VM with VMID " <> show vmid <> " not found."
+        _ -> do
+          _ <- (defaultRetryClient' transactionProxmoxState) (deleteVMSnapshot nodeName vmid snapName) >>= defaultClientErrorWrapper
+          _ <- waitForClient
+            300_000_000
+            (T.pack $ "Waiting for snapshotting of VM " <> vmName)
+            60
+            1_000_000
+            (defaultRetryClient' transactionProxmoxState $ getVMSnapshots nodeName vmid)
+            (snapshotNotPresent snapName)
+          pure ()
+executeTransactionAction (RollbackVM vmName snapName) = do
+  (TransactionState { transactionDeployConfig = deployConfig@(DeployConfig {deployParameters = (DeployParams { deployNodeName = nodeName }) }),.. }) <- get
+  data' <- transactionDataGetF
+  case getVMID vmName data' deployConfig of
+    Nothing -> $(logWarn) $ T.pack $ "VM " <> vmName <> " has no allocated VMID"
+    (Just vmid) -> do
+      vmMap <- (defaultRetryClient' transactionProxmoxState) (getNodeVMsMap nodeName) >>= defaultClientErrorWrapper
+      case M.lookup vmid vmMap of
+        Nothing -> $(logWarn) $ T.pack $ "VM with VMID " <> show vmid <> " not found."
+        _ -> do
+          _ <- (defaultRetryClient' transactionProxmoxState) (rollbackVM nodeName vmid (T.pack snapName) (ProxmoxRollbackParams True)) >>= defaultClientErrorWrapper
+          _ <- waitForClient
+            300_000_000
+            (T.pack $ "Waiting for restoring of VM " <> vmName)
+            60
+            1_000_000
+            (defaultRetryClient' transactionProxmoxState $ getVMPower nodeName vmid)
+            (`vmStateIs` VM.VMStopped)
+          pure ()
 executeTransactionAction (RemoveNetworks vmName) = do
   (TransactionState { transactionDeployConfig = deployConfig@(DeployConfig {deployParameters = (DeployParams { deployNodeName = nodeName }) }),.. }) <- get
   data' <- transactionDataGetF
@@ -498,6 +563,35 @@ planTransactionActions stages bridges sdnZones sdnNetworks storages vmMap state'
               (Just _) -> helper ts acc -- TODO: reconfig VM (and unify vm check, wtf)
               Nothing  -> helper ts (cloneStage ++ acc)
   helper ((NetworksRemoved vmName):ts) acc = helper ts (RemoveNetworks vmName:acc)
+  helper ((SnapshotExists vmParams snapshotParams@(ProxmoxSnapshotCreate { snapshotCreateName = snapName })):ts) acc = do
+    let vmName = configVMName vmParams
+    (TransactionState { transactionDeployConfig = deployConfig@(DeployConfig { deployParameters = DeployParams { deployNodeName = deployNodeName }}),  ..}) <- get
+    data' <- transactionDataGetF
+    case getVMID vmName data' deployConfig of
+      Nothing -> helper ts (MakeSnapshot vmName snapshotParams:acc)
+      (Just vmID) -> do
+        (ProxmoxResponse { proxmoxData = snapshots }) <- (defaultRetryClient' transactionProxmoxState) (getVMSnapshots deployNodeName vmID) >>= defaultClientErrorWrapper
+        if any ((==) snapName . snapshotName) snapshots then do
+          $(logInfo) $ "Found snapshot " <> snapName <> " of VM " <> T.pack vmName
+          helper ts acc
+        else do
+          helper ts (MakeSnapshot vmName snapshotParams:acc)
+  helper ((SnapshotNotExists vmParams snapshotParams@(ProxmoxSnapshotCreate { snapshotCreateName = snapName })):ts) acc = do
+    let vmName = configVMName vmParams
+    (TransactionState { transactionDeployConfig = deployConfig@(DeployConfig { deployParameters = DeployParams { deployNodeName = deployNodeName }}),  ..}) <- get
+    data' <- transactionDataGetF
+    case getVMID vmName data' deployConfig of
+      Nothing -> helper ts (DeleteSnapshot vmName snapshotParams:acc)
+      (Just vmID) -> do
+        (ProxmoxResponse { proxmoxData = snapshots }) <- (defaultRetryClient' transactionProxmoxState) (getVMSnapshots deployNodeName vmID) >>= defaultClientErrorWrapper
+        if any ((==) snapName . snapshotName) snapshots then do
+          $(logInfo) $ "Found snapshot " <> snapName <> " of VM " <> T.pack vmName
+          helper ts (DeleteSnapshot vmName snapshotParams:acc)
+        else do
+          helper ts acc
+  helper ((VMRollbacked vmParams targetSnapshot):ts) acc = do
+    let vmName = configVMName vmParams
+    helper ts (RollbackVM vmName targetSnapshot:acc)
   helper ((NetworkConnected vmName networkConfig@(ConfigVMNetwork { .. })):ts) acc = do
     (TransactionState { transactionDeployConfig = deployConfig@(DeployConfig { deployNetworks = configNetworks, deployParameters = DeployParams { deployNodeName = deployNodeName }}),  ..}) <- get
     let networkNames = map configNetworkName configNetworks
