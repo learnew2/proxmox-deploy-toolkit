@@ -315,7 +315,7 @@ executeTransactionAction (RollbackVM vmName snapName) = do
             60
             1_000_000
             (defaultRetryClient' transactionProxmoxState $ getVMPower nodeName vmid)
-            (`vmStateIs` VM.VMStopped)
+            (`vmStateIs` VM.VMRunning)
           pure ()
 executeTransactionAction (RemoveNetworks vmName) = do
   (TransactionState { transactionDeployConfig = deployConfig@(DeployConfig {deployParameters = (DeployParams { deployNodeName = nodeName }) }),.. }) <- get
