@@ -30,6 +30,7 @@ import           Data.Maybe
 import qualified Data.Text                       as T
 import           Parsers
 import           Proxmox.Models.NetworkInterface
+import           Utils
 
 data ConfigVMNetwork = ConfigVMNetwork
   { configVMNetworkName     :: !String
@@ -81,17 +82,19 @@ data ConfigVM = TemplatedConfigVM
   , configVMCores          :: !(Maybe Int)
   , configVMCPULimit       :: !(Maybe Int)
   , configVMMemory         :: !(Maybe Int)
+  , configVMTags           :: ![String]
   } | RawVM
   { configVMName    :: !String
   , configVMID      :: !(Maybe Int)
   , configVMDelay   :: !Int
   , configVMRunning :: !Bool
+  , configVMTags    :: ![String]
   } deriving (Show, Eq, Ord)
 
 formatConfigVMPatch :: ConfigVM -> Maybe (M.Map String Value)
 formatConfigVMPatch RawVM {} = Nothing
 formatConfigVMPatch TemplatedConfigVM { configVMCores = Nothing, configVMCPULimit = Nothing, configVMMemory = Nothing } = Nothing
-formatConfigVMPatch TemplatedConfigVM { .. } = (Just . M.fromList) $ cores ++ limit ++ memory where
+formatConfigVMPatch TemplatedConfigVM { .. } = (Just . M.fromList) $ cores ++ limit ++ memory ++ tags where
   cores = case configVMCores of
     Nothing  -> []
     (Just v) -> [("cores", (Number . fromIntegral) v)]
@@ -101,6 +104,13 @@ formatConfigVMPatch TemplatedConfigVM { .. } = (Just . M.fromList) $ cores ++ li
   memory = case configVMMemory of
     Nothing  -> []
     (Just v) -> [("memory", (Number . fromIntegral) v)]
+  tags = case configVMTags of
+    [] -> []
+    tagsList -> do
+      let escapedTags = filter (not . null) $ map escapeVirtualMachineTag tagsList
+      case escapedTags of
+        []        -> []
+        tagsList' -> [("tags", (String . T.pack) $ intercalate ";" tagsList')]
 
 instance ToJSON ConfigVM where
   toJSON (RawVM { .. }) = object
@@ -108,6 +118,7 @@ instance ToJSON ConfigVM where
     , "vmid" .= configVMID
     , "delay" .= configVMDelay
     , "running" .= configVMRunning
+    , "tags" .= configVMTags
     ]
   toJSON (TemplatedConfigVM { .. }) = object
     [ "clone_from" .= configVMParentTemplate
@@ -122,6 +133,7 @@ instance ToJSON ConfigVM where
     , "cores" .= configVMCores
     , "cpu_limit" .= configVMCPULimit
     , "memory" .= configVMMemory
+    , "tags" .= configVMTags
     ]
 
 instance FromJSON ConfigVM where
@@ -131,6 +143,7 @@ instance FromJSON ConfigVM where
       <*> v .:? "vmid"
       <*> v .:? "delay" .!= 0
       <*> nullDefaultWrapper (KM.lookup "running" v) True variableBooleanParser
+      <*> v .:? "tags" .!= []
     (Just (String _)) -> TemplatedConfigVM
       <$> v .: "clone_from"
       <*> v .: "name"
@@ -144,6 +157,7 @@ instance FromJSON ConfigVM where
       <*> v .:? "cores"
       <*> nullMaybeWrapper (KM.lookup "cpu_limit" v) (limitedNumberParser (`elem` [0..128]) "CPU limit must be in range of 0..128")
       <*> v .:? "memory"
+      <*> v .:? "tags" .!= []
     _anyOtherType -> fail "clone_from field has incorrect value type!"
 
 isTemplateVM :: ConfigVM -> Bool
