@@ -14,9 +14,11 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, see <http://www.gnu.org/licenses>. -}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TupleSections     #-}
 module Proxmox.Deploy.Models.Config.VM
   ( ConfigVM(..)
   , ConfigVMNetwork(..)
+  , CloudinitAddress(..)
   , isTemplateVM
   , formatConfigVMNetwork
   , formatConfigVMPatch
@@ -32,12 +34,25 @@ import           Parsers
 import           Proxmox.Models.NetworkInterface
 import           Utils
 
+data CloudinitAddress = DHCP | Manual String deriving (Show, Eq, Ord)
+
+instance FromJSON CloudinitAddress where
+  parseJSON (String "dhcp") = pure DHCP
+  parseJSON (String v)      = (pure . Manual . T.unpack) v
+  parseJSON _               = fail "Invalid value for cloudinit address"
+
+instance ToJSON CloudinitAddress where
+  toJSON DHCP       = String "dhcp"
+  toJSON (Manual v) = (String . T.pack) v
+
 data ConfigVMNetwork = ConfigVMNetwork
   { configVMNetworkName     :: !String
   , configVMNetworkFirewall :: !Bool
   , configVMDeviceType      :: !NetworkInterfaceType
   , configVMNetworkTag      :: !(Maybe Int)
   , configVMNetworkNumber   :: !(Maybe Int)
+  , configVMInitAdddress    :: !(Maybe CloudinitAddress)
+  , configVMInitGateway     :: !(Maybe String)
   } deriving (Show, Eq, Ord)
 
 formatConfigVMNetwork :: ConfigVMNetwork -> Maybe (String, String)
@@ -60,13 +75,15 @@ instance ToJSON ConfigVMNetwork where
     ]
 
 instance FromJSON ConfigVMNetwork where
-  parseJSON (String networkName) = pure $ ConfigVMNetwork (T.unpack networkName) True VIRTIO Nothing Nothing
+  parseJSON (String networkName) = pure $ ConfigVMNetwork (T.unpack networkName) True VIRTIO Nothing Nothing Nothing Nothing
   parseJSON (Object v) = ConfigVMNetwork
     <$> v .: "name"
     <*> v .:? "firewall" .!= True
     <*> v .:? "type" .!= VIRTIO
     <*> v .:? "tag"
     <*> nullMaybeWrapper (KM.lookup "number" v) (limitedNumberParser (`elem` [0..31]) "Network number must be in range 0..32")
+    <*> v .:? "cloudinit_address"
+    <*> v .:? "cloudinit_gateway"
   parseJSON _ = error "ConfigVMNetwork has invalid type"
 
 data ConfigVM = TemplatedConfigVM
@@ -83,18 +100,55 @@ data ConfigVM = TemplatedConfigVM
   , configVMCPULimit       :: !(Maybe Int)
   , configVMMemory         :: !(Maybe Int)
   , configVMTags           :: ![String]
+  , configVMInitUser       :: !(Maybe String)
+  , configVMInitPassword   :: !(Maybe String)
+  , configVMInitUpgrade    :: !Bool
+  , configVMInitDNS        :: !(Maybe String)
+  , configVMInitDomain     :: !(Maybe String)
+  , configVMInitSSHKeys    :: !(Maybe String)
   } | RawVM
-  { configVMName    :: !String
-  , configVMID      :: !(Maybe Int)
-  , configVMDelay   :: !Int
-  , configVMRunning :: !Bool
-  , configVMTags    :: ![String]
+  { configVMName         :: !String
+  , configVMID           :: !(Maybe Int)
+  , configVMDelay        :: !Int
+  , configVMRunning      :: !Bool
+  , configVMTags         :: ![String]
+  , configVMInitUser     :: !(Maybe String)
+  , configVMInitPassword :: !(Maybe String)
+  , configVMInitUpgrade  :: !Bool
+  , configVMInitDNS      :: !(Maybe String)
+  , configVMInitDomain   :: !(Maybe String)
+  , configVMInitSSHKeys  :: !(Maybe String)
   } deriving (Show, Eq, Ord)
 
 formatConfigVMPatch :: ConfigVM -> Maybe (M.Map String Value)
 formatConfigVMPatch RawVM {} = Nothing
 formatConfigVMPatch TemplatedConfigVM { configVMCores = Nothing, configVMCPULimit = Nothing, configVMMemory = Nothing } = Nothing
-formatConfigVMPatch TemplatedConfigVM { .. } = (Just . M.fromList) $ cores ++ limit ++ memory ++ tags where
+formatConfigVMPatch TemplatedConfigVM { .. } = (Just . M.fromList) $
+    cores ++
+    limit ++
+    memory ++
+    tags ++
+    networksInit ++
+    initUser ++
+    initPassword ++
+    initUpgrade ++
+    initDNS ++
+    initDomain ++
+    initSSHKeys
+    where
+  initSSHKeys = maybe [] ((:[]) . ("sshkeys",) . String . T.pack) configVMInitSSHKeys
+  initDomain = maybe [] ((:[]) . ("searchdomain",) . String . T.pack) configVMInitDomain
+  initUpgrade = ((:[]) . ("ciupgrade",) . String . (\v -> if v then "1" else "0")) configVMInitUpgrade
+  initDNS = maybe [] ((:[]) . ("nameserver",) . String . T.pack) configVMInitDNS
+  initUser = maybe [] ((:[]) . ("ciuser",) . String . T.pack) configVMInitUser
+  initPassword = maybe [] ((:[]) . ("cipassword",) . String . T.pack) configVMInitPassword
+  networksInit = foldMap networkInitF (fromMaybe [] configVMNetworks)
+  networkInitF :: ConfigVMNetwork -> [(String, Value)]
+  networkInitF (ConfigVMNetwork { configVMNetworkNumber = Nothing }) = []
+  networkInitF (ConfigVMNetwork { configVMInitAdddress = Nothing }) = []
+  networkInitF (ConfigVMNetwork { configVMNetworkNumber = Just netN, configVMInitAdddress = (Just DHCP)}) = [("ipconfig" <> show netN, "ip=dhcp")]
+  networkInitF (ConfigVMNetwork { configVMNetworkNumber = Just netN, configVMInitAdddress = (Just (Manual ip)), configVMInitGateway = Nothing }) = [("ipconfig" <> show netN, String $ "ip=" <> T.pack ip)]
+  networkInitF (ConfigVMNetwork { configVMNetworkNumber = Just netN, configVMInitAdddress = (Just (Manual ip)), configVMInitGateway = (Just gw)}) = [("ipconfig" <> show netN, String $ "ip=" <> T.pack ip <> ",gw=" <> T.pack gw)]
   cores = case configVMCores of
     Nothing  -> []
     (Just v) -> [("cores", (Number . fromIntegral) v)]
@@ -119,6 +173,12 @@ instance ToJSON ConfigVM where
     , "delay" .= configVMDelay
     , "running" .= configVMRunning
     , "tags" .= configVMTags
+    , "cloudinit_user" .= configVMInitUser
+    , "cloudinit_password" .= configVMInitPassword
+    , "cloudinit_upgrade" .= configVMInitUpgrade
+    , "cloudinit_dns" .= configVMInitDNS
+    , "cloudinit_domain" .= configVMInitDomain
+    , "cloudinit_sshkeys" .= configVMInitSSHKeys
     ]
   toJSON (TemplatedConfigVM { .. }) = object
     [ "clone_from" .= configVMParentTemplate
@@ -134,6 +194,12 @@ instance ToJSON ConfigVM where
     , "cpu_limit" .= configVMCPULimit
     , "memory" .= configVMMemory
     , "tags" .= configVMTags
+    , "cloudinit_user" .= configVMInitUser
+    , "cloudinit_password" .= configVMInitPassword
+    , "cloudinit_upgrade" .= configVMInitUpgrade
+    , "cloudinit_dns" .= configVMInitDNS
+    , "cloudinit_domain" .= configVMInitDomain
+    , "cloudinit_sshkeys" .= configVMInitSSHKeys
     ]
 
 instance FromJSON ConfigVM where
@@ -144,6 +210,12 @@ instance FromJSON ConfigVM where
       <*> v .:? "delay" .!= 0
       <*> nullDefaultWrapper (KM.lookup "running" v) True variableBooleanParser
       <*> v .:? "tags" .!= []
+      <*> v .:? "cloudinit_user"
+      <*> v .:? "cloudinit_password"
+      <*> v .:? "cloudinit_upgrade" .!= False
+      <*> v .:? "cloudinit_dns"
+      <*> v .:? "cloudinit_domain"
+      <*> v .:? "cloudinit_sshkeys"
     (Just (String _)) -> TemplatedConfigVM
       <$> v .: "clone_from"
       <*> v .: "name"
@@ -158,6 +230,12 @@ instance FromJSON ConfigVM where
       <*> nullMaybeWrapper (KM.lookup "cpu_limit" v) (limitedNumberParser (`elem` [0..128]) "CPU limit must be in range of 0..128")
       <*> v .:? "memory"
       <*> v .:? "tags" .!= []
+      <*> v .:? "cloudinit_user"
+      <*> v .:? "cloudinit_password"
+      <*> v .:? "cloudinit_upgrade" .!= False
+      <*> v .:? "cloudinit_dns"
+      <*> v .:? "cloudinit_domain"
+      <*> v .:? "cloudinit_sshkeys"
     _anyOtherType -> fail "clone_from field has incorrect value type!"
 
 isTemplateVM :: ConfigVM -> Bool
