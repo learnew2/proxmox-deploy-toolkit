@@ -84,8 +84,8 @@ instance FromJSON ConfigVMNetwork where
     <*> v .:? "type" .!= VIRTIO
     <*> v .:? "tag"
     <*> nullMaybeWrapper (KM.lookup "number" v) (limitedNumberParser (`elem` [0..31]) "Network number must be in range 0..32")
-    <*> v .:? "cloudinit_address"
-    <*> v .:? "cloudinit_gateway"
+    <*> nonEmptyObjectParser (KM.lookup "cloudinit_address" v)
+    <*> nonEmptyStringParser (KM.lookup "cloudinit_gateway" v)
   parseJSON _ = error "ConfigVMNetwork has invalid type"
 
 data ConfigVM = TemplatedConfigVM
@@ -212,12 +212,12 @@ instance FromJSON ConfigVM where
       <*> v .:? "delay" .!= 0
       <*> nullDefaultWrapper (KM.lookup "running" v) True variableBooleanParser
       <*> v .:? "tags" .!= []
-      <*> v .:? "cloudinit_user"
-      <*> v .:? "cloudinit_password"
-      <*> v .:? "cloudinit_upgrade" .!= False
-      <*> v .:? "cloudinit_dns"
-      <*> v .:? "cloudinit_domain"
-      <*> v .:? "cloudinit_sshkeys"
+      <*> nonEmptyStringParser (KM.lookup "cloudinit_user" v)
+      <*> nonEmptyStringParser (KM.lookup "cloudinit_password" v)
+      <*> nullDefaultWrapper (KM.lookup "cloudinit_upgrade" v) False variableBooleanParser
+      <*> nonEmptyStringParser (KM.lookup "cloudinit_dns" v)
+      <*> nonEmptyStringParser (KM.lookup "cloudinit_domain" v)
+      <*> nonEmptyStringParser (KM.lookup "cloudinit_sshkeys" v)
     (Just (String _)) -> TemplatedConfigVM
       <$> v .: "clone_from"
       <*> v .: "name"
@@ -232,12 +232,12 @@ instance FromJSON ConfigVM where
       <*> nullMaybeWrapper (KM.lookup "cpu_limit" v) (limitedNumberParser (`elem` [0..128]) "CPU limit must be in range of 0..128")
       <*> v .:? "memory"
       <*> v .:? "tags" .!= []
-      <*> v .:? "cloudinit_user"
-      <*> v .:? "cloudinit_password"
-      <*> v .:? "cloudinit_upgrade" .!= False
-      <*> v .:? "cloudinit_dns"
-      <*> v .:? "cloudinit_domain"
-      <*> v .:? "cloudinit_sshkeys"
+      <*> nonEmptyStringParser (KM.lookup "cloudinit_user" v)
+      <*> nonEmptyStringParser (KM.lookup "cloudinit_password" v)
+      <*> nullDefaultWrapper (KM.lookup "cloudinit_upgrade" v) False variableBooleanParser
+      <*> nonEmptyStringParser (KM.lookup "cloudinit_dns" v)
+      <*> nonEmptyStringParser (KM.lookup "cloudinit_domain" v)
+      <*> nonEmptyStringParser (KM.lookup "cloudinit_sshkeys" v)
     _anyOtherType -> fail "clone_from field has incorrect value type!"
 
 isTemplateVM :: ConfigVM -> Bool
