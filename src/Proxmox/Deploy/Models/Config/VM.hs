@@ -72,6 +72,8 @@ instance ToJSON ConfigVMNetwork where
     , "type" .= configVMDeviceType
     , "tag" .= configVMNetworkTag
     , "number" .= configVMNetworkNumber
+    , "cloudinit_address" .= configVMInitAdddress
+    , "cloudinit_gateway" .= configVMInitGateway
     ]
 
 instance FromJSON ConfigVMNetwork where
