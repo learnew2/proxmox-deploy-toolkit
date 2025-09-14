@@ -22,6 +22,7 @@ module Parsers
   , nullMaybeWrapper
   , variableBooleanParser
   , limitedNumberParser
+  , nonEmptyObjectParser
   ) where
 
 import           Data.Aeson
@@ -55,6 +56,12 @@ notNullWrapper :: MonadFail f => Maybe Value -> (Value -> f a) -> f a
 notNullWrapper Nothing _       = fail "Value must be not null"
 notNullWrapper (Just Null) _   = fail "Value must be not null"
 notNullWrapper (Just v) parser = parser v
+
+nonEmptyObjectParser Nothing            = pure Nothing
+nonEmptyObjectParser (Just Null)        = pure Nothing
+nonEmptyObjectParser (Just (String "")) = pure Nothing
+nonEmptyObjectParser (Just (String v))  = (parseJSON . String) v
+nonEmptyObjectParser _                  = fail "Invalid value type"
 
 nonEmptyStringParser Nothing            = pure Nothing
 nonEmptyStringParser (Just Null)        = pure Nothing
