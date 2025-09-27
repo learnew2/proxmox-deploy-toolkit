@@ -30,6 +30,7 @@ import           Data.List                       (intercalate)
 import qualified Data.Map                        as M
 import           Data.Maybe
 import qualified Data.Text                       as T
+import           Network.URI.Encode
 import           Parsers
 import           Proxmox.Models.NetworkInterface
 import           Utils
@@ -138,7 +139,7 @@ formatConfigVMPatch TemplatedConfigVM { .. } = (Just . M.fromList) $
     initDomain ++
     initSSHKeys
     where
-  initSSHKeys = maybe [] ((:[]) . ("sshkeys",) . String . T.pack) configVMInitSSHKeys
+  initSSHKeys = maybe [] ((:[]) . ("sshkeys",) . String . encodeText . T.pack) configVMInitSSHKeys
   initDomain = maybe [] ((:[]) . ("searchdomain",) . String . T.pack) configVMInitDomain
   initUpgrade = ((:[]) . ("ciupgrade",) . String . (\v -> if v then "1" else "0")) configVMInitUpgrade
   initDNS = maybe [] ((:[]) . ("nameserver",) . String . T.pack) configVMInitDNS

@@ -1,5 +1,5 @@
 name:                proxmox-deploy-toolkit
-version:             0.1.2.1
+version:             0.1.2.2
 github:              "learnew2/proxmox-deploy-toolkit"
 license:             GPL-3.0-or-later
 author:              "Ilya Zamaratskikh"
@@ -31,6 +31,7 @@ dependencies:
 - scientific == 0.3.7.0
 - yaml == 0.11.11.2
 - exceptions == 0.10.5
+- uri-encode == 1.5.0.7
 - proxmox-api
 - proxmox-fs-agent-api
 
